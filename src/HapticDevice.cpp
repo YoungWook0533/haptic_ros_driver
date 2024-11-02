@@ -13,6 +13,7 @@ HapticDevice::HapticDevice(ros::NodeHandle & node, float loop_rate, bool set_for
 
     position_.setZero();
     orientation_.setIdentity();
+    ori_encoder_.setZero();
     force_.setZero();
     lin_vel_.setZero();
     ang_vel_.setZero();
@@ -88,6 +89,11 @@ void HapticDevice::PublishHapticData()
     pose.pose.orientation.z = q.z();
     pose.pose.orientation.w = q.w();
 
+    std_msgs::Float32MultiArray ori_encoder_msg;
+    ori_encoder_msg.data.push_back(ori_encoder_(0));
+    ori_encoder_msg.data.push_back(ori_encoder_(1));
+    ori_encoder_msg.data.push_back(ori_encoder_(2));
+
     geometry_msgs::Twist twist;
     twist.linear.x = lin_vel_(0); 
     twist.linear.y = lin_vel_(1); 
@@ -100,6 +106,7 @@ void HapticDevice::PublishHapticData()
     button_stat.data.push_back(button0_state_);
 
     pose_pub_.publish(pose);
+    ori_encoder_pub_.publish(ori_encoder_msg);
     twist_pub_.publish(twist);
     button_state_pub_.publish(button_stat);
 }
@@ -107,6 +114,7 @@ void HapticDevice::PublishHapticData()
 void HapticDevice::RegisterCallback()
 {
     pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/haptic/pose",1);
+    ori_encoder_pub_ = nh_.advertise<std_msgs::Float32MultiArray>("/haptic/encoder_orientation", 1);
     twist_pub_ = nh_.advertise<geometry_msgs::Twist>("/haptic/twist",1);
     button_state_pub_ = nh_.advertise<std_msgs::Int8MultiArray>("/haptic/button_state", 1);
     force_sub_ = nh_.subscribe<geometry_msgs::Vector3>("/haptic/force",1, &HapticDevice::ForceCallback, this);
@@ -128,6 +136,7 @@ void HapticDevice::GetHapticDataRun()
     double current_orientation[3][3] = {{1.0, 0.0, 0.0},
                                         {0.0, 1.0, 0.0},
                                         {0.0, 0.0, 1.0}};
+    double current_ori_encoder[3] = {0.0, 0.0, 0.0};
     double current_lin_vel[3] = {0.0, 0.0, 0.0};
     double current_ang_vel[3] = {0.0, 0.0, 0.0};
 
@@ -149,6 +158,11 @@ void HapticDevice::GetHapticDataRun()
                 orientation_(2,0) = current_orientation[2][0];
                 orientation_(2,1) = current_orientation[2][1];
                 orientation_(2,2) = current_orientation[2][2];
+
+                dhdGetOrientationRad(&current_ori_encoder[0], &current_ori_encoder[1], &current_ori_encoder[2]);
+                ori_encoder_(0) = current_ori_encoder[0];
+                ori_encoder_(1) = current_ori_encoder[1];
+                ori_encoder_(2) = current_ori_encoder[2];
 
                 dhdGetLinearVelocity(&current_lin_vel[0], &current_lin_vel[1], &current_lin_vel[2]);
                 lin_vel_(0) = current_lin_vel[0];
@@ -210,11 +224,13 @@ void HapticDevice::ApplyReturnToOriginForce()
 {
     if (!set_force_) return;
 
-    double force_multiplier = 50.0;
+    double p_gain = 100.0;
+    double d_gain = 5.0;
 
     val_lock_.lock();
     Eigen::Vector3d distance_to_origin = -position_;
-    force_ = force_multiplier * distance_to_origin;
+    if(distance_to_origin.norm() < 0.01) p_gain *= 5.0;
+    force_ = p_gain * distance_to_origin - d_gain * lin_vel_;
     val_lock_.unlock();
 }
 

@@ -5,7 +5,8 @@
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/PoseStamped.h>
-#include "std_msgs/Int8MultiArray.h"
+#include <std_msgs/Int8MultiArray.h>
+#include <std_msgs/Float32MultiArray.h>
 #include <boost/thread/thread.hpp>
 #include <mutex>
 #include <vector>
@@ -48,6 +49,7 @@ class HapticDevice
 
        ros::Publisher pose_pub_;
        ros::Publisher twist_pub_;
+       ros::Publisher ori_encoder_pub_;
        ros::Publisher button_state_pub_;
        ros::Subscriber force_sub_;
 
@@ -55,6 +57,7 @@ class HapticDevice
 
        Eigen::Vector3d position_;
        Eigen::Matrix3d orientation_;
+       Eigen::Vector3d ori_encoder_;
        Eigen::Vector3d force_;
        Eigen::Vector3d lin_vel_;
        Eigen::Vector3d ang_vel_;
