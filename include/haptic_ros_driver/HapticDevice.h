@@ -1,67 +1,81 @@
-#ifndef HAPTIC_DEVICE_H__
-#define HAPTIC_DEVICE_H__
+#ifndef HAPTIC_ROS_DRIVER__HAPTICDEVICE_HPP_
+#define HAPTIC_ROS_DRIVER__HAPTICDEVICE_HPP_
 
-#include "ros/ros.h"
-#include <geometry_msgs/Vector3.h>
-#include <geometry_msgs/Twist.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <std_msgs/Int8MultiArray.h>
-#include <std_msgs/Float32MultiArray.h>
-#include <boost/thread/thread.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/vector3.hpp>
+#include <geometry_msgs/msg/wrench_stamped.hpp>
+#include <std_msgs/msg/float32_multi_array.hpp>
+#include <std_msgs/msg/int8_multi_array.hpp>
+#include <Eigen/Dense>
+#include <thread>
 #include <mutex>
-#include <vector>
-#include <eigen3/Eigen/Dense>
+#include <atomic>
 
+// low-level Haptic API
+#include "haptic_ros_driver/dhdc.h"
 
-class HapticDevice
+namespace haptic_ros_driver
 {
-	public:
-        HapticDevice(ros::NodeHandle& node, float loop_rate, bool set_force);
-        virtual ~HapticDevice();
 
-        void PublishHapticData();
-        void RegisterCallback();
+class HapticDevice : public rclcpp::Node
+{
+public:
+  HapticDevice(double loop_hz = 1000.0, bool set_force = true);
+  ~HapticDevice() override;
 
-        void GetHapticDataRun();
-		
-        void SetForce(Eigen::Vector3d force);
+  /// Start background thread + spinning
+  void Start();
 
-        void VerifyForceLimit(Eigen::Vector3d &force);
-        void ForceCallback(const geometry_msgs::Vector3::ConstPtr &data);
-        void ApplyReturnToOriginForce();
+private:
+  void RegisterCallback();
+  void PublishHapticData();
+  void GetHapticDataRun();
+  void ForceCallback(const geometry_msgs::msg::Vector3::SharedPtr msg);
+  void WrenchCallback(const geometry_msgs::msg::WrenchStamped::SharedPtr msg);
+  void SetForce(const Eigen::Vector3d &force);
+  void VerifyForceLimit(Eigen::Vector3d &force);
+  void ApplyReturnToOriginForce();
 
+  // publishers & subscribers
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
+  rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr ori_encoder_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_pub_;
+  rclcpp::Publisher<std_msgs::msg::Int8MultiArray>::SharedPtr button_state_pub_;
+  rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr wrench_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr force_sub_;
 
-        void Start();
+  // timing
+  double loop_hz_;
+  rclcpp::Rate loop_rate_;
 
-    protected:
-       std::shared_ptr<boost::thread> dev_op_thread_;
+  // device thread
+  std::thread dev_op_thread_;
+  std::atomic<bool> keep_alive_;
 
-	private:
-       ros::NodeHandle nh_;
-       ros::Rate loop_rate_;
-       int device_count_;
-       int dev_id_;
-       bool set_force_;
-       bool keep_alive_=false;
-       bool device_enabled_ = false;
-       std::mutex val_lock_;
-       bool force_released_;
+  // device state
+  int  device_count_;
+  int  dev_id_;
+  bool set_force_;
+  bool device_enabled_;
 
-       ros::Publisher pose_pub_;
-       ros::Publisher twist_pub_;
-       ros::Publisher ori_encoder_pub_;
-       ros::Publisher button_state_pub_;
-       ros::Subscriber force_sub_;
+  // data protection
+  std::mutex val_lock_;
+  bool force_released_;
 
-       Eigen::Vector3d force_limit_;
-
-       Eigen::Vector3d position_;
-       Eigen::Matrix3d orientation_;
-       Eigen::Vector3d ori_encoder_;
-       Eigen::Vector3d force_;
-       Eigen::Vector3d lin_vel_;
-       Eigen::Vector3d ang_vel_;
-       bool button0_state_=false;
+  // haptic state vectors
+  Eigen::Vector3d force_limit_;
+  Eigen::Vector3d filtered_force_feedback_;
+  Eigen::Vector3d position_;
+  Eigen::Matrix3d orientation_;
+  Eigen::Vector3d ori_encoder_;
+  Eigen::Vector3d force_;
+  Eigen::Vector3d lin_vel_;
+  Eigen::Vector3d ang_vel_;
+  bool button0_state_;
 };
 
-#endif
+}  // namespace haptic_ros_driver
+
+#endif  // HAPTIC_ROS_DRIVER__HAPTICDEVICE_HPP_

@@ -1,4 +1,4 @@
-#include "ros/ros.h"
+#include "rclcpp/rclcpp.hpp"
 
 #include "haptic_ros_driver/HapticDevice.h"
 
@@ -18,18 +18,17 @@ int main(int argc, char *argv[])
 	 * You must call one of the versions of ros::init() before using any other
 	 * part of the ROS system.
 	 */
-	ros::init(argc, argv, "haptic_ros_driver");
+	rclcpp::init(argc, argv);
 
 	/**
 	 * NodeHandle is the main access point to communications with the ROS system.
 	 * The first NodeHandle constructed will fully initialize this node, and the last
 	 * NodeHandle destructed will close down the node.
 	 */
-    ros::NodeHandle nh;
-
-    HapticDevice haptic_dev(nh, 1000, true);
+	auto node = std::make_shared<haptic_ros_driver::HapticDevice>(1000.0, true);
 	
-    haptic_dev.Start();
+    node->Start();
 
+	rclcpp::shutdown();
 	return 0;
 }
